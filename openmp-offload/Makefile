@@ -22,7 +22,8 @@ GridInit.c \
 XSutils.c \
 Materials.c
 
-obj = $(source:.c=.o)
+
+obj = $(source:.c=.o) ompx_wrapper.o
 
 #===============================================================================
 # Sets Flags
@@ -32,7 +33,9 @@ obj = $(source:.c=.o)
 CFLAGS := -std=gnu99 -Wall
 
 # Linker Flags
-LDFLAGS = -lm
+#LDFLAGS = -lm -L/home/mdewing/software/openmp/ompx/usr/lib -foffload-lto --offload-new-driver -lompx -lstdc++ -L/usr/local/cuda-11.5/lib64 -lcuda -lcudart -fgpu-rdc
+LDFLAGS := $(LDPATHS) -lm -foffload-lto --offload-new-driver -lompx -lstdc++ -lcuda -lcudart -fgpu-rdc
+$(info LDFLAGS is $(LDFLAGS))
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
@@ -49,7 +52,9 @@ endif
 # LLVM Compiler Targeting A100 -- Change SM Level to Target Other GPUs
 ifeq ($(COMPILER),llvm)
   CC = clang
-  CFLAGS += -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -Xopenmp-target -march=sm_80
+  CPP = clang++
+  #CFLAGS += -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -Xopenmp-target -march=sm_61 -fopenmp-offload-mandatory
+  CFLAGS += -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -Xopenmp-target -march=sm_61  --cuda-path=/usr/local/cuda-11.5 -foffload-lto --offload-new-driver -fgpu-rdc -fPIE -fopenmp-offload-mandatory
 endif
 
 # IBM XL Compiler
@@ -61,7 +66,9 @@ endif
 # NVIDIA Compiler Targeting A100 -- Change SM Level to Target Other GPUs
 ifeq ($(COMPILER),nvidia)
   CC = nvc
-  CFLAGS += -mp=gpu -Minfo=mp -gpu=cc80
+  CPP = nvc++
+  #CFLAGS += -mp=gpu -Minfo=mp -gpu=cc80
+  CFLAGS += -mp=gpu -Minfo=mp -gpu=cc61
 endif
 
 # AOMP Targeting MI100 -- Change march to Target Other GPUs
@@ -102,6 +109,9 @@ $(program): $(obj) XSbench_header.h Makefile
 
 %.o: %.c XSbench_header.h Makefile
 	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.cpp
+	$(CPP) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(program) $(obj)
