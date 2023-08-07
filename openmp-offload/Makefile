@@ -33,8 +33,7 @@ obj = $(source:.c=.o) ompx_wrapper.o
 CFLAGS := -std=gnu99 -Wall
 
 # Linker Flags
-#LDFLAGS = -lm -L/home/mdewing/software/openmp/ompx/usr/lib -foffload-lto --offload-new-driver -lompx -lstdc++ -L/usr/local/cuda-11.5/lib64 -lcuda -lcudart -fgpu-rdc
-LDFLAGS := $(LDPATHS) -lm -foffload-lto --offload-new-driver -lompx -lstdc++ -lcuda -lcudart -fgpu-rdc
+override LDFLAGS += -lm -fgpu-rdc -lompx -lcuda -lcudart -lstdc++
 $(info LDFLAGS is $(LDFLAGS))
 
 # Regular gcc Compiler
@@ -53,8 +52,10 @@ endif
 ifeq ($(COMPILER),llvm)
   CC = clang
   CPP = clang++
-  #CFLAGS += -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -Xopenmp-target -march=sm_61 -fopenmp-offload-mandatory
-  CFLAGS += -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -Xopenmp-target -march=sm_61  --cuda-path=/usr/local/cuda-11.5 -foffload-lto --offload-new-driver -fgpu-rdc -fPIE -fopenmp-offload-mandatory
+  OPENMP_FLAGS = --offload-new-driver -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=native  -fopenmp-offload-mandatory
+  CFLAGS +=  $(OPENMP_FLAGS) -fgpu-rdc -fPIE
+  override CXXFLAGS += $(OPENMP_FLAGS)
+ $(info CXXFLAGS is $(CXXFLAGS))
 endif
 
 # IBM XL Compiler
@@ -67,8 +68,7 @@ endif
 ifeq ($(COMPILER),nvidia)
   CC = nvc
   CPP = nvc++
-  #CFLAGS += -mp=gpu -Minfo=mp -gpu=cc80
-  CFLAGS += -mp=gpu -Minfo=mp -gpu=cc61
+  CFLAGS += -mp=gpu -Minfo=mp -gpu=cc80
 endif
 
 # AOMP Targeting MI100 -- Change march to Target Other GPUs
