@@ -436,9 +436,9 @@ unsigned long long run_event_based_simulation_optimization_1(Inputs in, Simulati
     SD.mat_samples =  (int *) malloc(in.lookups * sizeof(int));
     SD.length_mat_samples = in.lookups;
 
-	//#pragma omp target teams distribute parallel for \
-	//map(from: SD.p_energy_samples[:SD.length_p_energy_samples])\
-	//map(from: SD.mat_samples[:SD.length_mat_samples])
+	#pragma omp target teams distribute parallel for \
+	map(from: SD.p_energy_samples[:SD.length_p_energy_samples])\
+	map(from: SD.mat_samples[:SD.length_mat_samples])
 	for( int i = 0; i < in.lookups; i++ )
 	{
 		// Set the initial seed value
@@ -470,19 +470,10 @@ unsigned long long run_event_based_simulation_optimization_1(Inputs in, Simulati
         offsets[m] = offsets[m-1]  + n_lookups_per_material[m-1];
     }
 
-    //use_device_ptr(SD.mat_samples, SD.p_energy_samples)
-    int* mat_samp_ptr = SD.mat_samples;
-    double* en_samp_ptr = SD.p_energy_samples;
-//#pragma omp target data map(tofrom:SD.mat_samples[:in.lookups], SD.p_energy_samples[:in.lookups])
-    //ompx_device_sort_by_key(SD.mat_samples, SD.mat_samples + in.lookups, SD.p_energy_samples);
-//  use_device_ptr(mat_samp_ptr, en_samp_ptr)
-#pragma omp target data map(tofrom:mat_samp_ptr[:in.lookups], en_samp_ptr[:in.lookups])
-    ompx_device_sort_by_key(mat_samp_ptr, mat_samp_ptr + in.lookups, en_samp_ptr);
-    //ompx_device_sort_by_key_n(mat_samp_ptr, in.lookups, en_samp_ptr);
+#pragma omp target data map(tofrom:SD.mat_samples[:in.lookups], SD.p_energy_samples[:in.lookups])
+    ompx_device_sort_by_key(SD.mat_samples, SD.mat_samples + in.lookups, SD.p_energy_samples);
 
-    for (int m = 0; m < 12; m++) {
-#if 0
-	#pragma omp target teams distribute parallel for\
+#pragma omp target enter data \
 	map(to: SD.max_num_nucs)\
 	map(to: SD.p_energy_samples[:in.lookups])\
 	map(to: SD.mat_samples[:in.lookups])\
@@ -492,8 +483,10 @@ unsigned long long run_event_based_simulation_optimization_1(Inputs in, Simulati
 	map(to: SD.unionized_energy_array[:SD.length_unionized_energy_array])\
 	map(to: SD.index_grid[:SD.length_index_grid])\
 	map(to: SD.nuclide_grid[:SD.length_nuclide_grid])\
-  map(tofrom: verification[:in.lookups])
-#endif
+    map(to: verification[:in.lookups])
+
+    for (int m = 0; m < 12; m++) {
+	#pragma omp target teams distribute parallel for
 	    for( int i = offsets[m]; i < offsets[m] + n_lookups_per_material[m]; i++ )
         {
             double macro_xs_vector[5] = {0};
@@ -542,69 +535,8 @@ unsigned long long run_event_based_simulation_optimization_1(Inputs in, Simulati
         }
     }
 
-
-#if 0
-
-
-	#pragma omp target teams distribute parallel for\
-	map(to: SD.max_num_nucs)\
-	map(to: SD.num_nucs[:SD.length_num_nucs])\
-	map(to: SD.concs[:SD.length_concs])\
-	map(to: SD.mats[:SD.length_mats])\
-	map(to: SD.unionized_energy_array[:SD.length_unionized_energy_array])\
-	map(to: SD.index_grid[:SD.length_index_grid])\
-	map(to: SD.nuclide_grid[:SD.length_nuclide_grid])\
-  map(from: verification[:in.lookups])
-	for( int i = 0; i < in.lookups; i++ )
-    {
-
-		// debugging
-		//printf("E = %lf mat = %d\n", p_energy, mat);
-
-		double macro_xs_vector[5] = {0};
-
-        double p_energy = SD.p_energy_samples[i];
-        int mat = SD.mat_samples[i];
-		
-		// Perform macroscopic Cross Section Lookup
-		calculate_macro_xs(
-				p_energy,        // Sampled neutron energy (in lethargy)
-				mat,             // Sampled material type index neutron is in
-				in.n_isotopes,   // Total number of isotopes in simulation
-				in.n_gridpoints, // Number of gridpoints per isotope in simulation
-				SD.num_nucs,     // 1-D array with number of nuclides per material
-				SD.concs,        // Flattened 2-D array with concentration of each nuclide in each material
-				SD.unionized_energy_array, // 1-D Unionized energy array
-				SD.index_grid,   // Flattened 2-D grid holding indices into nuclide grid for each unionized energy level
-				SD.nuclide_grid, // Flattened 2-D grid holding energy levels and XS_data for all nuclides in simulation
-				SD.mats,         // Flattened 2-D array with nuclide indices defining composition of each type of material
-				macro_xs_vector, // 1-D array with result of the macroscopic cross section (5 different reaction channels)
-				in.grid_type,    // Lookup type (nuclide, hash, or unionized)
-				in.hash_bins,    // Number of hash bins used (if using hash lookup type)
-				SD.max_num_nucs  // Maximum number of nuclides present in any material
-				);
-
-		// For verification, and to prevent the compiler from optimizing
-		// all work out, we interrogate the returned macro_xs_vector array
-		// to find its maximum value index, then increment the verification
-		// value by that index. In this implementation, we prevent thread
-		// contention by using an OMP reduction on the verification value.
-		// For accelerators, a different approach might be required
-		// (e.g., atomics, reduction of thread-specific values in large
-		// array via CUDA thrust, etc).
-		double max = -1.0;
-		int max_idx = 0;
-		for(int j = 0; j < 5; j++ )
-		{
-			if( macro_xs_vector[j] > max )
-			{
-				max = macro_xs_vector[j];
-				max_idx = j;
-			}
-		}
-		verification[i] = max_idx+1;
-	}
-#endif
+#pragma omp target exit data \
+    map(from: verification[:in.lookups])
 
   // Reduce validation hash on the host
   unsigned long long validation_hash = 0;
