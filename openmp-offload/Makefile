@@ -33,8 +33,17 @@ obj = $(source:.c=.o) ompx_wrapper.o
 CFLAGS := -std=gnu99 -Wall
 
 # Linker Flags
-override LDFLAGS += -lm -fgpu-rdc -lompx -lcuda -lcudart -lstdc++
-$(info LDFLAGS is $(LDFLAGS))
+LDFLAGS += -lm
+
+# If using libompx
+#  - set LIBOMPX_PATH to install location
+#  - may need to set PLATFORM_LIBS
+
+# CUDA
+# PLATFORM_LIBS = -lcuda -lcudart
+# ROCm
+# PLATFORM_LIBS = -lamdhip64
+LDFLAGS += -fgpu-rdc -L$(LIBOMPX_PATH)/lib -lompx $(PLATFORM_LIBS) -lstdc++
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
@@ -52,10 +61,9 @@ endif
 ifeq ($(COMPILER),llvm)
   CC = clang
   CPP = clang++
-  OPENMP_FLAGS = --offload-new-driver -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=native  -fopenmp-offload-mandatory
+  OPENMP_FLAGS = -fopenmp --offload-arch=native  -fopenmp-offload-mandatory
   CFLAGS +=  $(OPENMP_FLAGS) -fgpu-rdc -fPIE
-  override CXXFLAGS += $(OPENMP_FLAGS)
- $(info CXXFLAGS is $(CXXFLAGS))
+  CXXFLAGS += -I$(LIBOMPX_PATH)/include $(OPENMP_FLAGS)
 endif
 
 # IBM XL Compiler
